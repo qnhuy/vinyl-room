@@ -1,103 +1,109 @@
 # Vinyl Room — Ứng Dụng Nghe Nhạc Trực Tuyến
 
-**Vinyl Room** là ứng dụng nghe nhạc trực tuyến đa nền tảng kết hợp **Flutter** (Frontend), **Node.js / Express** (Backend RESTful API) và **Microsoft SQL Server** (Cơ sở dữ liệu quan hệ).
+**Vinyl Room** là ứng dụng phát và quản lý âm nhạc đa nền tảng kết hợp **Flutter** (Frontend), **Node.js / Express** (Backend RESTful API) và **Microsoft SQL Server** (Cơ sở dữ liệu quan hệ).
 
 ---
 
 ## 📑 Mục Lục
-- [1. Mô Tả Ứng Dụng](#1-mô-tả-ứng-dụng)
-- [2. Cấu Trúc Dự Án](#2-cấu-trúc-dự-án)
-- [3. Hướng Dẫn Cài Đặt & Khởi Chạy Backend API](#3-hướng-dẫn-cài-đặt--khởi-chạy-backend-api)
-- [4. Danh Sách RESTful API](#4-danh-sách-restful-api)
-- [5. Cơ Sở Dữ Liệu & Dữ Liệu Mẫu](#5-cơ-sở-dữ-liệu--dữ-liệu-mẫu)
+- [1. Tính Năng Đã Hoàn Thiện](#1-tính-năng-đã-hoàn-thiện)
+- [2. Kiến Trúc Phân Lớp Frontend (ui/lib)](#2-kiến-trúc-phân-lớp-frontend-uilib)
+- [3. Hướng Dẫn Cài Đặt & Khởi Chạy](#3-hướng-dẫn-cài-đặt--khởi-chạy)
+- [4. Tài Khoản Kiểm Thử](#4-tài-khoản-kiểm-thử)
+- [5. State Management & Lưu Trữ Cục Bộ](#5-state-management--lưu-trữ-cục-bộ)
+- [6. Danh Sách RESTful API Backend](#6-danh-sách-restful-api-backend)
 
 ---
 
-## 1. Mô Tả Ứng Dụng
-Ứng dụng nghe nhạc với giao diện đĩa than cổ điển, hỗ trợ phát nhạc trực tuyến, quản lý danh sách phát cá nhân và công khai, bảng xếp hạng nghe nhiều nhất và tìm kiếm bài hát theo sở thích.
+## 1. Tính Năng Đã Hoàn Thiện
+
+* **Xác thực người dùng:** Đăng ký, đăng nhập tài khoản, kiểm tra dữ liệu đầu vào (validation), lưu trữ phiên làm việc lâu dài.
+* **Trình phát nhạc Audio Player:**
+  * Phát trực tuyến qua mạng nền tảng đa luồng.
+  * Thanh Mini Player thu nhỏ gắn liền ở đáy ứng dụng giúp điều khiển nhạc thuận tiện trên mọi màn hình.
+  * Màn hình toàn diện Now Playing với đĩa than xoay hoạt họa mô phỏng máy phát đĩa Vinyl.
+  * Thanh tua thời gian thực, điều chỉnh âm lượng, nút lặp bài hát.
+* **Khám phá & Bảng xếp hạng:** Danh sách bài hát thịnh hành, Top lượt nghe Ranking vinh danh Top 1/2/3 với huy hiệu màu sắc riêng biệt.
+* **Tìm kiếm & Lịch sử:** Tìm kiếm bài hát theo tên hoặc ca sĩ, lưu và xóa lịch sử tìm kiếm gần đây.
+* **Playlist Cá nhân & Cộng đồng:** Tạo playlist, thêm/bớt bài hát, bật/tắt chia sẻ Công khai (Public) hoặc Riêng tư (Private), lưu playlist của người dùng khác.
+* **Giao diện:** Hỗ trợ linh hoạt Dark Mode và Light Mode.
 
 ---
 
-## 2. Cấu Trúc Dự Án
+## 2. Kiến Trúc Phân Lớp Frontend (`ui/lib`)
+
+Ứng dụng Flutter được tổ chức theo cấu trúc phân lớp sạch sẽ và rõ ràng:
+
 ```
-vinyl-room/
-├── api/             # Mã nguồn Backend Node.js / Express API
-│   ├── configs/     # Cấu hình kết nối SQL Server
-│   ├── musics/      # Static files nhạc mẫu
-│   ├── routes/      # Các routers (auth, music, playlists, users)
-│   └── server.js    # Entry point của server Express
-├── docs/            # Tài liệu thiết kế ERD
-├── ui/              # Mã nguồn Frontend Flutter
-└── vinyl-room.sql   # Kịch bản khởi tạo CSDL & dữ liệu mẫu
+ui/lib/
+├── config/        # Quản lý cấu hình toàn ứng dụng & biến môi trường
+├── models/        # Các mô hình dữ liệu (Song, User, Playlist, SearchHistory)
+├── presenters/    # Tầng Presenter xử lý nghiệp vụ theo mô hình MVP
+├── providers/     # Quản lý State toàn cục bằng Provider (PlayerProvider, AuthProvider, MusicProvider)
+├── screens/       # Các màn hình người dùng (Login, Register, Home, Ranking, Search, NowPlaying, Playlist...)
+├── services/      # Tầng giao tiếp HTTP API và SharedPreferences Session
+├── utils/         # Tiện ích Http wrapper (timeout 15s, tự động đính kèm x-user-id)
+├── widgets/       # Các widget dùng chung (MiniPlayer, SongTile, SongCard, PlaylistCard...)
+└── main.dart      # Điểm khởi đầu ứng dụng
 ```
 
 ---
 
-## 3. Hướng Dẫn Cài Đặt & Khởi Chạy Backend API
-
-### Yêu Cầu
-* Node.js phiên bản 18 trở lên.
-* Microsoft SQL Server (2019/2022 hoặc Express Edition) kèm SSMS.
+## 3. Hướng Dẫn Cài Đặt & Khởi Chạy
 
 ### Bước 1: Khởi Tạo Cơ Sở Dữ Liệu
-1. Mở SQL Server Management Studio (SSMS).
-2. Mở file [`vinyl-room.sql`](./vinyl-room.sql) và nhấn **Execute (F5)** để tạo cơ sở dữ liệu `vinyl_room` cùng toàn bộ dữ liệu mẫu ban đầu.
+1. Mở file [`vinyl-room.sql`](./vinyl-room.sql) trong SQL Server Management Studio (SSMS).
+2. Nhấn **Execute (F5)** để tạo database `vinyl_room` và nạp toàn bộ bảng cùng dữ liệu mẫu.
 
-### Bước 2: Cài Đặt & Khởi Chạy Backend
-1. Điều hướng vào thư mục backend:
+### Bước 2: Khởi Động Backend API
+1. Mở terminal và điều hướng vào thư mục backend:
    ```powershell
    cd api
-   ```
-2. Tạo file cấu hình `.env` dựa trên `.env.example`:
-   ```ini
-   PORT=3000
-   DB_HOST=localhost
-   DB_PORT=1433
-   DB_NAME=vinyl_room
-   DB_USER=sa
-   DB_PASSWORD=YourPassword123
-   ```
-3. Cài đặt các gói phụ thuộc và khởi động server:
-   ```powershell
    npm install
    npm start
-   # Hoặc chế độ dev tự nạp lại khi sửa code:
-   npm run dev
    ```
-Server sẽ chạy tại `http://localhost:3000`.
+   Backend sẽ lắng nghe tại `http://localhost:3000`.
+
+### Bước 3: Khởi Động Ứng Dụng Flutter
+1. Điều hướng vào thư mục `ui`:
+   ```powershell
+   cd ui
+   flutter pub get
+   ```
+2. Cấu hình biến môi trường trong file `ui/.env`:
+   - Chạy trên máy ảo Android Emulator: `BASE_API_URL=http://10.0.2.2:3000`
+   - Chạy trên máy tính (Desktop/Web): `BASE_API_URL=http://localhost:3000`
+   - Chạy trên điện thoại thật (cùng Wi-Fi): `BASE_API_URL=http://<IP_LAN_MAY_TINH>:3000`
+3. Chạy ứng dụng:
+   ```powershell
+   flutter run
+   ```
 
 ---
 
-## 4. Danh Sách RESTful API
+## 4. Tài Khoản Kiểm Thử
 
-Hệ thống đã triển khai đầy đủ các endpoint RESTful và có thể kiểm thử trực tiếp qua Postman hoặc Swagger:
-
-### 🔐 Xác Thực (`/auth`)
-| Phương thức | Đường dẫn | Chức năng | Tham số / Body |
-|---|---|---|---|
-| `POST` | `/auth/register` | Đăng ký tài khoản người dùng mới | `{ username, password, email }` |
-| `POST` | `/auth/login` | Đăng nhập tài khoản | `{ username, password }` |
-
-### 🎵 Âm Nhạc (`/music`)
-| Phương thức | Đường dẫn | Chức năng | Ghi chú |
-|---|---|---|---|
-| `GET` | `/music` | Lấy toàn bộ danh sách bài hát | Trả về metadata và URL stream |
-| `GET` | `/music/ranking` | Bảng xếp hạng các bài hát nghe nhiều nhất | Sắp xếp theo `listen_count DESC` |
-| `GET` | `/music/favorites` | Lấy danh sách bài hát yêu thích | Header: `x-user-id` |
-| `GET` | `/music/recent` | Danh sách bài hát vừa nghe gần đây | Header: `x-user-id` |
-| `GET` | `/music/search?q=...` | Tìm kiếm bài hát theo tên hoặc ca sĩ | Query string: `q` |
-| `POST` | `/music/:id/listen` | Ghi nhận lượt nghe bài hát | Tăng `listen_count` và lưu lịch sử |
-
-### 📂 Danh Sách Phát (`/playlists` & `/users`)
-| Phương thức | Đường dẫn | Chức năng | Ghi chú |
-|---|---|---|---|
-| `GET` | `/playlists/public` | Lấy tất cả playlist công khai của cộng đồng | `is_shared = 1` |
-| `GET` | `/playlists/:id/songs` | Lấy danh sách bài hát trong một playlist | Theo `playlist_id` |
-| `PUT` | `/playlists/:id/share` | Bật/Tắt chế độ công khai playlist | `{ is_shared: 0 / 1 }` |
-| `POST/DELETE`| `/users/:userId/liked/:musicId` | Thêm / Xóa bài hát yêu thích | Lưu vào `user_liked_songs` |
+| Tên đăng nhập (Username) | Mật khẩu (Password) | Trạng thái |
+|---|---|---|
+| `nguyenvanA` | `123456` | Hoạt động bình thường |
+| `tranthib` | `123456` | Hoạt động bình thường |
+| `hoangvane` | `123456` | Đã bị khóa (`isActive = 0`, báo lỗi khi đăng nhập) |
 
 ---
 
-## 5. Cơ Sở Dữ Liệu & Dữ Liệu Mẫu
+## 5. State Management & Lưu Trữ Cục Bộ
 
-Cơ sở dữ liệu được định nghĩa trong file [`vinyl-room.sql`](./vinyl-room.sql), đi kèm dữ liệu mẫu gồm 10 tài khoản người dùng, hàng loạt nghệ sĩ hàng đầu Việt Nam (Sơn Tùng M-TP, Mỹ Tâm, Đen Vâu, Vũ, Bích Phương...), các album phát hành và các bài hát mẫu có sẵn file audio mp3.
+* **State Management (Provider):**
+  * `PlayerProvider`: Quản lý luồng phát nhạc, trạng thái đang phát/tạm dừng, hàng đợi bài hát, thời lượng bài hát và âm lượng.
+  * `AuthProvider`: Quản lý trạng thái phiên đăng nhập của người dùng và chế độ Theme (Dark / Light Mode).
+  * `MusicProvider`: Bắn tín hiệu lắng nghe làm mới danh sách bài hát realtime.
+* **Lưu Trữ Cục Bộ (SharedPreferences):**
+  * Lưu trữ định danh người dùng đăng nhập (`user_id`, `username`, `email`, `avatar_url`) giúp duy trì phiên làm việc không bị gián đoạn khi mở lại app.
+  * Lưu trữ lịch sử các từ khóa tìm kiếm gần đây.
+
+---
+
+## 6. Danh Sách RESTful API Backend
+
+* **`/auth`**: Đăng ký (`POST /register`), Đăng nhập (`POST /login`).
+* **`/music`**: Lấy kho bài hát (`GET /`), Xếp hạng (`GET /ranking`), Yêu thích (`GET /favorites`), Vừa nghe (`GET /recent`), Tìm kiếm (`GET /search`), Tăng lượt nghe (`POST /:id/listen`).
+* **`/playlists` & `/users`**: Lấy danh sách phát công khai (`GET /playlists/public`), Bài hát trong playlist (`GET /playlists/:id/songs`), Bật/tắt chia sẻ (`PUT /playlists/:id/share`), Yêu thích bài hát/playlist (`POST/DELETE`).
