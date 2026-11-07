@@ -175,6 +175,32 @@ router.get("/:musicId/smart-next", async (req, res) => {
 
     const pool = await getPool();
 
+    // Kiểm tra quyền gói Vinyl Premium (19.000đ/tháng)
+    if (userId > 0) {
+      const uRes = await pool
+        .request()
+        .input("uid", userId)
+        .query(`
+          SELECT is_premium, premium_expires_at 
+          FROM users 
+          WHERE user_id = @uid
+        `);
+      const user = uRes.recordset[0];
+      const isPremium = user && (user.is_premium === 1 && (!user.premium_expires_at || new Date(user.premium_expires_at) > new Date()));
+      if (!isPremium) {
+        return res.status(403).json({
+          error: "Tính năng AI Smart Flow độc quyền cho thành viên Vinyl Premium (19.000đ/tháng).",
+          code: "PREMIUM_REQUIRED",
+          need_upgrade: true
+        });
+      }
+    } else {
+      return res.status(401).json({
+        error: "Vui lòng đăng nhập và nâng cấp gói Vinyl Premium để sử dụng tính năng AI Smart Flow.",
+        code: "AUTH_REQUIRED"
+      });
+    }
+
     // 1. Lấy thông tin bài hát hiện tại
     const currentResult = await pool
       .request()
