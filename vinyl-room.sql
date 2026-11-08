@@ -1,6 +1,6 @@
 -- ============================================================
 -- DATABASE SCRIPT: vinyl_room (Vinyl Room Music Streaming)
--- Giai đoạn 2: CSDL Kèm Toàn Bộ Dữ Liệu Mẫu (Seed Data)
+-- Hỗ trợ đầy đủ phân hệ Khách, Người dùng & Quản trị viên (Admin)
 -- ============================================================
 
 USE master;
@@ -20,16 +20,21 @@ USE vinyl_room;
 GO
 
 -- ==========================================
--- 1. QUẢN LÝ NGƯỜI DÙNG
+-- 1. QUẢN LÝ NGƯỜI DÙNG & PHÂN QUYỀN
 -- ==========================================
 CREATE TABLE users (
   user_id INT IDENTITY(1,1) PRIMARY KEY,
-  username NVARCHAR(255) NOT NULL UNIQUE,
+  username NVARCHAR(255) NOT NULL,
   password NVARCHAR(255) NOT NULL,
   email NVARCHAR(255),
   avatar_url NVARCHAR(MAX),
-  isActive INT NOT NULL DEFAULT 1 -- 1: Hoạt động, 0: Bị khóa
+  role NVARCHAR(50) NOT NULL CONSTRAINT DF_users_role DEFAULT 'user', -- 'user' | 'admin'
+  isActive INT NOT NULL DEFAULT 1, -- 1: Hoạt động, 0: Bị khóa
+  is_premium INT NOT NULL CONSTRAINT DF_users_is_premium DEFAULT 0, -- 1: Premium, 0: Free
+  premium_expires_at DATETIME2 NULL -- Thời điểm hết hạn gói Premium (30 ngày)
 );
+CREATE NONCLUSTERED INDEX IX_users_role ON users(role);
+CREATE NONCLUSTERED INDEX IX_users_premium ON users(is_premium);
 
 -- ==========================================
 -- 2. DỮ LIỆU ÂM NHẠC
@@ -44,29 +49,28 @@ CREATE TABLE artists (
 CREATE TABLE albums (
   album_id INT IDENTITY(1,1) PRIMARY KEY,
   album_name NVARCHAR(255) NOT NULL,
-  artist_id INT NOT NULL,
+  artist_id INT,
   cover_image_url NVARCHAR(MAX),
-  release_date DATE,
+  release_date VARCHAR(50),
   CONSTRAINT FK_Albums_Artists FOREIGN KEY (artist_id)
-    REFERENCES artists(artist_id) ON DELETE CASCADE
+    REFERENCES artists(artist_id) ON DELETE SET NULL
 );
 
 CREATE TABLE genres (
   genre_id INT IDENTITY(1,1) PRIMARY KEY,
-  genre_name NVARCHAR(100) NOT NULL,
-  description NVARCHAR(MAX)
+  genre_name NVARCHAR(100) NOT NULL
 );
 
 CREATE TABLE music (
   music_id INT IDENTITY(1,1) PRIMARY KEY,
   music_name NVARCHAR(255) NOT NULL,
-  music_length NVARCHAR(50),
+  music_length VARCHAR(20) NOT NULL,
   audio_url NVARCHAR(MAX) NOT NULL,
   cover_image_url NVARCHAR(MAX),
   artist_id INT,
   album_id INT,
   genre_id INT,
-  ranking INT DEFAULT 0,
+  ranking INT,
   listen_count INT DEFAULT 0,
   CONSTRAINT FK_Music_Artists FOREIGN KEY (artist_id)
     REFERENCES artists(artist_id) ON DELETE SET NULL,
@@ -77,25 +81,25 @@ CREATE TABLE music (
 );
 
 -- ==========================================
--- 3. PLAYLIST & YÊU THÍCH
+-- 3. PLAYLIST HỆ THỐNG & USER
 -- ==========================================
 CREATE TABLE playlist (
   playlist_id INT IDENTITY(1,1) PRIMARY KEY,
   playlist_name NVARCHAR(255) NOT NULL,
   playlist_song_list_count INT DEFAULT 0,
-  favourite INT DEFAULT 0,
+  favourite INT NOT NULL DEFAULT 0,
   favourite_count INT DEFAULT 0,
   description NVARCHAR(MAX),
   cover_image_url NVARCHAR(MAX)
 );
 
 CREATE TABLE playlist_music (
-  playlist_id INT NOT NULL,
-  music_id INT NOT NULL,
-  CONSTRAINT PK_PlaylistMusic PRIMARY KEY (playlist_id, music_id),
-  CONSTRAINT FK_PlaylistMusic_Playlist FOREIGN KEY (playlist_id)
+  playlist_id INT,
+  music_id INT,
+  PRIMARY KEY (playlist_id, music_id),
+  CONSTRAINT FK_PM_Playlist FOREIGN KEY (playlist_id)
     REFERENCES playlist(playlist_id) ON DELETE CASCADE,
-  CONSTRAINT FK_PlaylistMusic_Music FOREIGN KEY (music_id)
+  CONSTRAINT FK_PM_Music FOREIGN KEY (music_id)
     REFERENCES music(music_id) ON DELETE CASCADE
 );
 
@@ -113,9 +117,9 @@ CREATE TABLE user_playlist (
 );
 
 CREATE TABLE user_playlist_music (
-  user_playlist_id INT NOT NULL,
-  music_id INT NOT NULL,
-  CONSTRAINT PK_UserPlaylistMusic PRIMARY KEY (user_playlist_id, music_id),
+  user_playlist_id INT,
+  music_id INT,
+  PRIMARY KEY (user_playlist_id, music_id),
   CONSTRAINT FK_UPM_UserPlaylist FOREIGN KEY (user_playlist_id)
     REFERENCES user_playlist(user_playlist_id) ON DELETE CASCADE,
   CONSTRAINT FK_UPM_Music FOREIGN KEY (music_id)
@@ -123,22 +127,37 @@ CREATE TABLE user_playlist_music (
 );
 
 CREATE TABLE user_liked_songs (
-  user_id INT NOT NULL,
-  music_id INT NOT NULL,
-  CONSTRAINT PK_UserLikedSongs PRIMARY KEY (user_id, music_id),
+  user_id INT,
+  music_id INT,
+  created_at DATETIME2 DEFAULT GETDATE(),
+  PRIMARY KEY (user_id, music_id),
   CONSTRAINT FK_ULS_Users FOREIGN KEY (user_id)
     REFERENCES users(user_id) ON DELETE CASCADE,
   CONSTRAINT FK_ULS_Music FOREIGN KEY (music_id)
     REFERENCES music(music_id) ON DELETE CASCADE
 );
 
+-- Yêu thích playlist của người khác
 CREATE TABLE user_liked_playlists (
   user_id INT NOT NULL,
   user_playlist_id INT NOT NULL,
-  CONSTRAINT PK_UserLikedPlaylists PRIMARY KEY (user_id, user_playlist_id),
+  created_at DATETIME2 DEFAULT GETDATE(),
+  PRIMARY KEY (user_id, user_playlist_id),
   CONSTRAINT FK_ULP_Users FOREIGN KEY (user_id)
     REFERENCES users(user_id) ON DELETE NO ACTION,
-  CONSTRAINT FK_ULP_UserPlaylist FOREIGN KEY (user_playlist_id)
+  CONSTRAINT FK_ULP_Playlist FOREIGN KEY (user_playlist_id)
+    REFERENCES user_playlist(user_playlist_id) ON DELETE CASCADE
+);
+
+-- Bảng playlist_favourites phục vụ các route API backend
+CREATE TABLE playlist_favourites (
+  id INT IDENTITY(1,1) PRIMARY KEY,
+  user_id INT NOT NULL,
+  playlist_id INT NOT NULL,
+  created_at DATETIME2 DEFAULT GETDATE(),
+  CONSTRAINT FK_PF_Users FOREIGN KEY (user_id)
+    REFERENCES users(user_id) ON DELETE NO ACTION,
+  CONSTRAINT FK_PF_Playlist FOREIGN KEY (playlist_id)
     REFERENCES user_playlist(user_playlist_id) ON DELETE CASCADE
 );
 
@@ -146,11 +165,11 @@ CREATE TABLE user_liked_playlists (
 -- 4. LỊCH SỬ
 -- ==========================================
 CREATE TABLE history (
-  history_id INT IDENTITY(1,1) PRIMARY KEY,
+  id INT IDENTITY(1,1) PRIMARY KEY,
   user_id INT NOT NULL,
   search_query NVARCHAR(255),
   music_id INT,
-  type NVARCHAR(50) NOT NULL, -- 'listen' | 'search'
+  type VARCHAR(50) NOT NULL, -- 'search' | 'listen'
   created_at DATETIME2 DEFAULT GETDATE(),
   CONSTRAINT FK_History_Users FOREIGN KEY (user_id)
     REFERENCES users(user_id) ON DELETE CASCADE,
@@ -160,81 +179,118 @@ CREATE TABLE history (
 GO
 
 -- ==========================================
--- 5. SEED DATA KHỞI TẠO
+-- 5. ĐƠN HÀNG THANH TOÁN (PAYOS ORDERS)
+-- ==========================================
+CREATE TABLE orders (
+  order_id INT IDENTITY(1,1) PRIMARY KEY,
+  order_code BIGINT NOT NULL UNIQUE, -- Mã đơn hàng PayOS dạng số nguyên
+  user_id INT NOT NULL,
+  amount INT NOT NULL DEFAULT 19000, -- Gói 19.000 VNĐ / 30 ngày
+  description NVARCHAR(255) NOT NULL,
+  status NVARCHAR(50) NOT NULL DEFAULT 'PENDING', -- 'PENDING', 'PAID', 'CANCELLED'
+  payment_link_id NVARCHAR(255) NULL,
+  created_at DATETIME2 DEFAULT GETDATE(),
+  paid_at DATETIME2 NULL,
+  CONSTRAINT FK_Orders_Users FOREIGN KEY (user_id)
+    REFERENCES users(user_id) ON DELETE CASCADE
+);
+CREATE NONCLUSTERED INDEX IX_orders_order_code ON orders(order_code);
+GO
+
+-- ==========================================
+-- 6. SEED DATA KHỞI TẠO
 -- ==========================================
 
--- Seed 10 Người dùng mẫu
-INSERT INTO users (username, password, email, avatar_url, isActive) VALUES
-(N'nguyenvanA', N'123456', N'a.nv@email.com', N'https://example.com/avatars/a.jpg', 1),
-(N'tranthib', N'123456', N'b.tt@email.com', N'https://example.com/avatars/b.jpg', 1),
-(N'levanc', N'123456', N'c.lv@email.com', N'https://example.com/avatars/c.jpg', 1),
-(N'phamthid', N'123456', N'd.pt@email.com', N'https://example.com/avatars/d.jpg', 1),
-(N'hoangvane', N'123456', N'e.hv@email.com', N'https://example.com/avatars/e.jpg', 0),
-(N'vuthip', N'123456', N'f.vt@email.com', N'https://example.com/avatars/f.jpg', 1),
-(N'dangvang', N'123456', N'g.dv@email.com', N'https://example.com/avatars/g.jpg', 1),
-(N'buihinh', N'123456', N'h.bh@email.com', N'https://example.com/avatars/h.jpg', 1),
-(N'ngothii', N'123456', N'i.nt@email.com', N'https://example.com/avatars/i.jpg', 0),
-(N'duongvank', N'123456', N'k.dv@email.com', N'https://example.com/avatars/k.jpg', 1);
+-- Seed Người dùng (Gồm 10 User thường + 1 Quản trị viên Admin)
+-- nguyenvanA: Đã đăng ký gói Vinyl Premium (còn hạn dùng)
+-- admin: Tài khoản Admin có quyền Premium
+-- Các tài khoản còn lại: Gói Miễn phí (Free)
+INSERT INTO users (username, password, email, avatar_url, role, isActive, is_premium, premium_expires_at) VALUES
+(N'nguyenvanA', N'123456', N'a.nv@email.com', N'https://example.com/avatars/a.jpg', N'user', 1, 1, DATEADD(day, 25, GETDATE())),
+(N'tranthib', N'123456', N'b.tt@email.com', N'https://example.com/avatars/b.jpg', N'user', 1, 0, NULL),
+(N'levanc', N'123456', N'c.lv@email.com', N'https://example.com/avatars/c.jpg', N'user', 1, 0, NULL),
+(N'phamthid', N'123456', N'd.pt@email.com', N'https://example.com/avatars/d.jpg', N'user', 1, 0, NULL),
+(N'hoangvane', N'123456', N'e.hv@email.com', N'https://example.com/avatars/e.jpg', N'user', 0, 0, NULL),
+(N'vuthip', N'123456', N'f.vt@email.com', N'https://example.com/avatars/f.jpg', N'user', 1, 0, NULL),
+(N'dangvang', N'123456', N'g.dv@email.com', N'https://example.com/avatars/g.jpg', N'user', 1, 0, NULL),
+(N'buihinh', N'123456', N'h.bh@email.com', N'https://example.com/avatars/h.jpg', N'user', 1, 0, NULL),
+(N'ngothii', N'123456', N'i.nt@email.com', N'https://example.com/avatars/i.jpg', N'user', 0, 0, NULL),
+(N'duongvank', N'123456', N'k.dv@email.com', N'https://example.com/avatars/k.jpg', N'user', 1, 0, NULL),
+(N'admin', N'admin123456', N'admin@vinylroom.com', N'https://example.com/avatars/admin.jpg', N'admin', 1, 1, DATEADD(year, 5, GETDATE()));
+
+-- Seed đơn hàng mẫu đã thanh toán của nguyenvanA
+INSERT INTO orders (order_code, user_id, amount, description, status, paid_at) VALUES
+(1000001, 1, 19000, N'Vinyl Room Premium 19k', 'PAID', GETDATE());
 
 INSERT INTO artists (artist_name, avatar_url, bio) VALUES
 (N'Sơn Tùng M-TP', N'https://example.com/artists/sontung.jpg', N'Ca sĩ nhạc Pop/R&B hàng đầu Việt Nam.'),
-(N'Mỹ Tâm', N'https://example.com/artists/mytam.jpg', N'Họa mi tóc nâu - Biểu tượng nhạc nhẹ Việt Nam.'),
-(N'Đen Vâu', N'https://example.com/artists/den.jpg', N'Rapper mộc mạc với ca từ sâu sắc.'),
-(N'Vũ', N'https://example.com/artists/vu.jpg', N'Hoàng tử Indie Việt với các bản ballad trầm ấm.'),
-(N'Hà Anh Tuấn', N'https://example.com/artists/haanhtuan.jpg', N'Ca sĩ acoustic truyền cảm hứng.'),
-(N'Hoàng Thùy Linh', N'https://example.com/artists/hoangthuylinh.jpg', N'Âm nhạc dân gian đương đại độc đáo.'),
-(N'Bích Phương', N'https://example.com/artists/bichphuong.jpg', N'Nữ ca sĩ Pop/Ballad đa dạng phong cách.'),
-(N'Soobin Hoàng Sơn', N'https://example.com/artists/soobin.jpg', N'Ca sĩ theo đuổi R&B hiện đại.'),
-(N'AMEE', N'https://example.com/artists/amee.jpg', N'Nữ ca sĩ trẻ với phong cách ngọt ngào.'),
-(N'Trúc Nhân', N'https://example.com/artists/trucnhan.jpg', N'Ca sĩ phong cách châm biếm, cá tính.');
+(N'Mỹ Tâm', N'https://example.com/artists/mytam.jpg', N'Họa mi tóc nâu, biểu tượng âm nhạc V-Pop.'),
+(N'Đen Vâu', N'https://example.com/artists/denvau.jpg', N'Rapper mang đậm chất thơ và cuộc sống đời thường.'),
+(N'Bích Phương', N'https://example.com/artists/bichphuong.jpg', N'Nữ ca sĩ với nhiều bản hit Pop catchy.'),
+(N'Hoàng Thùy Linh', N'https://example.com/artists/hoangthuylinh.jpg', N'Tiên phong kết hợp âm nhạc dân gian và hiện đại.'),
+(N'Jack', N'https://example.com/artists/jack.jpg', N'Ca sĩ trẻ sở hữu lượng fan khủng tại Việt Nam.'),
+(N'Hà Anh Tuấn', N'https://example.com/artists/ha_anhtuan.jpg', N'Chủ nhân của các chuỗi concert âm nhạc lãng mạn.'),
+(N'Vũ.', N'https://example.com/artists/vu.jpg', N'Hoàng tử Indie của làng nhạc Việt.'),
+(N'Amee', N'https://example.com/artists/amee.jpg', N'Nữ ca sĩ trẻ với giọng hát ngọt ngào, trong trẻo.'),
+(N'Trúc Nhân', N'https://example.com/artists/trucnhan.jpg', N'Ca sĩ sở hữu phong cách âm nhạc độc đáo, cá tính.');
 
-INSERT INTO genres (genre_name, description) VALUES
-(N'V-Pop', N'Nhạc Pop Việt Nam hiện đại'),
-(N'Ballad', N'Giai điệu nhẹ nhàng, sâu lắng'),
-(N'Rap / Hip-hop', N'Nhạc Rap đời thường, gieo vần cá tính'),
-(N'Indie', N'Âm nhạc độc lập, mộc mạc và chân thành'),
-(N'R&B', N'Giai điệu mượt mà, cảm xúc');
+INSERT INTO genres (genre_name) VALUES
+(N'Pop'),
+(N'Ballad'),
+(N'Rap / Hip-hop'),
+(N'R&B'),
+(N'Dance / Electronic'),
+(N'Indie'),
+(N'Rock'),
+(N'Bolero'),
+(N'Acoustic'),
+(N'Remix');
 
 INSERT INTO playlist (playlist_name, playlist_song_list_count, favourite, favourite_count, description, cover_image_url) VALUES
-(N'Top Hits Việt Nam', 0, 0, 1200, N'Tuyển tập các bản hit đình đám nhất.', N'https://example.com/playlists/tophits.jpg'),
-(N'Giai Điệu Thư Giãn', 0, 0, 850, N'Nhẹ nhàng thư thái sau ngày dài.', N'https://example.com/playlists/chill.jpg'),
-(N'Acoustic Chiều Mưa', 0, 0, 640, N'Mộc mạc bên tách cà phê.', N'https://example.com/playlists/acoustic.jpg'),
+(N'Top V-Pop Thịnh Hành', 3, 1, 5400, N'Những bài hát hot nhất hiện tại.', N'https://example.com/playlists/vpop.jpg'),
+(N'Nhạc Trẻ Đỉnh Cao', 2, 1, 3200, N'Tổng hợp hit trẻ được yêu thích.', N'https://example.com/playlists/nhactre.jpg'),
+(N'Rap Việt Cực Cháy', 1, 0, 1500, N'Giai điệu rap đậm chất đường phố.', N'https://example.com/playlists/rapviet.jpg'),
+(N'Ballad Buồn Lắng Đọng', 3, 1, 4100, N'Dành cho những tâm sự buồn.', N'https://example.com/playlists/ballad.jpg'),
+(N'Indie Chill Thư Giãn', 1, 0, 890, N'Thả lỏng tâm hồn cùng nhạc indie.', N'https://example.com/playlists/indie.jpg'),
+(N'Nhạc Dance Sôi Động', 2, 0, 1200, N'Khuấy động bữa tiệc của bạn.', N'https://example.com/playlists/dance.jpg'),
+(N'Giai Điệu Acoustic', 1, 0, 450, N'Mộc mạc và chân thành.', N'https://example.com/playlists/acoustic.jpg'),
+(N'Lofi Chill Khuya', 0, 1, 2300, N'Học tập và làm việc hiệu quả.', N'https://example.com/playlists/lofi.jpg'),
 (N'Trữ Tình Quê Hương', 0, 0, 300, N'Giai điệu quê hương đong đầy.', N'https://example.com/playlists/bolero.jpg'),
 (N'Top Album Cũ Mà Hay', 0, 0, 150, N'Những hoài niệm xưa cũ.', N'https://example.com/playlists/classic.jpg');
 
 INSERT INTO albums (album_name, artist_id, cover_image_url, release_date) VALUES
 (N'm-tp MTP', 1, N'https://example.com/albums/mtpmtp.jpg', '2017-04-01'),
 (N'Tâm 9', 2, N'https://example.com/albums/tam9.jpg', '2017-12-03'),
-(N'Một Triệu Like', 3, N'https://example.com/albums/mottrieulike.jpg', '2020-01-19'),
-(N'Một Giấc Mơ', 4, N'https://example.com/albums/motgiacmo.jpg', '2020-10-10'),
-(N'Truyện Ngắn', 5, N'https://example.com/albums/truyenngan.jpg', '2019-09-01'),
-(N'Hoàng', 6, N'https://example.com/albums/hoang.jpg', '2019-10-20'),
-(N'Dramatic', 7, N'https://example.com/albums/dramatic.jpg', '2018-11-18'),
-(N'The Playah', 8, N'https://example.com/albums/theplayah.jpg', '2020-11-15'),
+(N'Nhà Đen', 3, N'https://example.com/albums/nhaden.jpg', '2020-05-15'),
+(N'Dramatic', 4, N'https://example.com/albums/dramatic.jpg', '2018-11-18'),
+(N'LINK', 5, N'https://example.com/albums/link.jpg', '2022-08-11'),
+(N'Hồng nhan', 6, N'https://example.com/albums/jack.jpg', '2021-01-10'),
+(N'Truyện Ngắn', 7, N'https://example.com/albums/truyenngan.jpg', '2019-09-20'),
+(N'Một Vạn Năm', 8, N'https://example.com/albums/motvannam.jpg', '2022-03-09'),
 (N'dreAMEE', 9, N'https://example.com/albums/dreamee.jpg', '2020-06-28'),
-(N'Thật Bất Ngờ', 10, N'https://example.com/albums/thatbatngo.jpg', '2015-12-10');
+(N'Sáng Mắt Chưa', 10, N'https://example.com/albums/sangmatchua.jpg', '2019-07-31');
 
 INSERT INTO user_playlist (user_id, playlist_name, playlist_song_list_count, favourite, favourite_count, description, is_shared) VALUES
-(1, N'Nhạc Buổi Sáng', 2, 0, 0, N'Nhạc khởi đầu ngày mới', 1),
-(1, N'Gym & Chạy Bộ', 0, 0, 0, N'Năng lượng tập luyện', 0),
-(2, N'Ballad Tâm Trạng', 2, 0, 0, N'Những đêm mưa', 1),
-(3, N'Indie Việt Hay Nhất', 1, 0, 0, N'Tuyển chọn Indie', 1),
-(4, N'Nhạc Làm Việc', 0, 0, 0, N'Tập trung cao độ', 0),
-(5, N'Nhạc Quê Hương', 0, 0, 0, N'Giai điệu ngọt ngào', 0),
-(6, N'Chill Cuối Tuần', 1, 0, 0, N'Thư giãn thứ 7', 1),
-(7, N'Acoustic Chọn Lọc', 0, 0, 0, N'Mộc mạc guitar', 1),
+(1, N'Nhạc của A', 2, 0, 0, N'Playlist cá nhân nghe lúc rảnh', 1),
+(1, N'Sơn Tùng Playlist', 1, 1, 0, N'Toàn bài hay của Tùng', 0),
+(2, N'B Tri Âm', 2, 0, 0, N'Bài hát yêu thích của B', 1),
+(3, N'Rap để nghe', 1, 0, 0, N'Tổng hợp nhạc rap', 1),
+(4, N'Nhạc ngủ ngon', 2, 1, 0, N'Nghe trước khi đi ngủ', 0),
+(5, N'Playlist E', 0, 0, 0, N'Nháp', 0),
+(6, N'F chill', 1, 0, 0, N'Giai điệu nhẹ nhàng', 1),
+(7, N'G Collection', 1, 0, 0, N'Bộ sưu tập cá nhân', 1),
 (8, N'H yêu âm nhạc', 0, 0, 0, N'Chưa phân loại', 0),
 (10, N'K Track', 1, 0, 0, N'Thư viện cá nhân', 1);
 
 INSERT INTO music (music_name, music_length, audio_url, cover_image_url, artist_id, album_id, genre_id, ranking, listen_count) VALUES
 (N'Lạc Trôi', '03:55', N'http://10.0.2.2:3000/musics/LacTroi.mp3', N'https://example.com/cover/lactroi.jpg', 1, 1, 1, 1, 150000),
 (N'Đâu Chỉ Riêng Em', '04:12', N'http://10.0.2.2:3000/musics/DauChiRiengEm.mp3', N'https://example.com/cover/dauchiriengem.jpg', 2, 2, 2, 2, 120000),
-(N'Trốn Tìm', '04:05', N'http://10.0.2.2:3000/musics/TronTim.mp3', N'https://example.com/cover/trontim.jpg', 3, 3, 3, 3, 98000),
-(N'Bước Qua Nhau', '04:17', N'http://10.0.2.2:3000/musics/BuocQuaNhau.mp3', N'https://example.com/cover/buocquanhau.jpg', 4, 4, 4, 4, 110000),
-(N'Tháng Tư Là Lời Nói Dối Của Em', '05:02', N'http://10.0.2.2:3000/musics/ThangTu.mp3', N'https://example.com/cover/thangtu.jpg', 5, 5, 2, 5, 135000),
-(N'Để Mị Nói Cho Mà Nghe', '03:20', N'http://10.0.2.2:3000/musics/DeMiNoi.mp3', N'https://example.com/cover/deminoi.jpg', 6, 6, 1, 6, 142000),
-(N'Bùa Yêu', '04:01', N'http://10.0.2.2:3000/musics/BuaYeu.mp3', N'https://example.com/cover/buayeu.jpg', 7, 7, 1, 7, 105000),
-(N'Phía Sau Một Cô Gái', '04:25', N'http://10.0.2.2:3000/musics/PhiaSauMotCoGai.mp3', N'https://example.com/cover/phiasau.jpg', 8, 8, 2, 8, 118000),
+(N'Trốn Tìm', '04:30', N'http://10.0.2.2:3000/musics/TronTim.mp3', N'https://example.com/cover/trontim.jpg', 3, 3, 3, 3, 200000),
+(N'Bùa Yêu', '03:22', N'http://10.0.2.2:3000/musics/BuaYeu.mp3', N'https://example.com/cover/buayeu.jpg', 4, 4, 1, 4, 95000),
+(N'Gieo Quẻ', '03:25', N'http://10.0.2.2:3000/musics/GieoQue.mp3', N'https://example.com/cover/gieoque.jpg', 5, 5, 5, 5, 110000),
+(N'Đom Đóm', '04:05', N'http://10.0.2.2:3000/musics/DomDom.mp3', N'https://example.com/cover/domdom.jpg', 6, 6, 2, 6, 85000),
+(N'Tháng Mấy Em Nhớ Anh?', '04:45', N'http://10.0.2.2:3000/musics/ThangMayEmNhoAnh.mp3', N'https://example.com/cover/thangmayemnhoanh.jpg', 7, 7, 2, 7, 78000),
+(N'Bước Qua Nhau', '04:01', N'http://10.0.2.2:3000/musics/BuocQuaNhau.mp3', N'https://example.com/cover/buocquanhau.jpg', 8, 8, 6, 8, 134000),
 (N'Sao Anh Chưa Về Nhà', '03:36', N'http://10.0.2.2:3000/musics/SaoAnhChuaVeNha.mp3', N'https://example.com/cover/saoanhchuavenha.jpg', 9, 9, 1, 9, 67000),
 (N'Sáng Mắt Chưa', '03:40', N'http://10.0.2.2:3000/musics/SangMatChua.mp3', N'https://example.com/cover/sangmatchua.jpg', 10, 10, 5, 10, 89000);
 
@@ -242,37 +298,39 @@ INSERT INTO music (music_name, music_length, audio_url, cover_image_url, artist_
 INSERT INTO playlist_music (playlist_id, music_id) VALUES
 (1, 1), (1, 4), (1, 5),
 (2, 1), (2, 6),
-(3, 4), (3, 5),
-(4, 2),
-(5, 5), (5, 6);
+(3, 3),
+(4, 2), (4, 7), (4, 8),
+(5, 8);
 
 INSERT INTO user_playlist_music (user_playlist_id, music_id) VALUES
-(1, 1), (1, 3),
-(3, 2), (3, 8),
-(4, 4),
-(7, 6),
+(1, 1), (1, 2),
+(2, 1),
+(3, 2), (3, 7),
+(4, 3),
+(5, 7), (5, 8),
+(7, 8),
+(8, 4),
 (10, 5);
 
 INSERT INTO user_liked_songs (user_id, music_id) VALUES
-(1, 1), (1, 2), (1, 4),
-(2, 2), (2, 3),
-(3, 4),
-(4, 5), (4, 6),
-(5, 1),
-(6, 7), (6, 8),
-(7, 3),
-(8, 9), (8, 10),
-(9, 2),
-(10, 5);
+(1, 1), (1, 3),
+(2, 2), (2, 4),
+(3, 3),
+(4, 5),
+(6, 1),
+(7, 7),
+(8, 8),
+(10, 9);
 
 INSERT INTO history (user_id, search_query, music_id, type) VALUES
-(1, N'Lạc Trôi', NULL, 'search'),
+(1, N'Lạc Trôi', 1, 'search'),
 (1, NULL, 1, 'listen'),
-(2, N'Đâu Chỉ Riêng Em', NULL, 'search'),
+(2, N'Mỹ Tâm', NULL, 'search'),
 (2, NULL, 2, 'listen'),
-(3, N'Đen Vâu', NULL, 'search'),
-(4, NULL, 4, 'listen'),
-(5, NULL, 5, 'listen'),
+(3, N'Đen Vâu', 3, 'search'),
+(3, NULL, 3, 'listen'),
+(4, N'Bùa Yêu', 4, 'search'),
+(5, N'Gieo Quẻ', 5, 'search'),
 (6, NULL, 6, 'listen'),
 (7, N'Hà Anh Tuấn', 7, 'search');
 
@@ -286,6 +344,17 @@ INSERT INTO user_liked_playlists (user_id, user_playlist_id) VALUES
 (10, 7),
 (2, 10);
 
+INSERT INTO playlist_favourites (user_id, playlist_id) VALUES
+(2, 1),
+(3, 1),
+(1, 3),
+(1, 4),
+(6, 1),
+(7, 3),
+(10, 7),
+(2, 10);
+
+-- Cập nhật favourite_count theo bảng liked
 UPDATE up
 SET favourite_count = (
   SELECT COUNT(*)

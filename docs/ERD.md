@@ -13,6 +13,7 @@ erDiagram
     USERS ||--o{ USER_LIKED_PLAYLISTS : "lưu playlist"
     USERS ||--o{ PLAYLIST_FAVOURITES : "favourite"
     USERS ||--o{ HISTORY : "ghi nhận"
+    USERS ||--o{ ORDERS : "thanh toán"
 
     ARTISTS ||--o{ ALBUMS : "phát hành"
     ARTISTS ||--o{ MUSIC : "trình bày"
@@ -38,6 +39,8 @@ erDiagram
         nvarchar avatar_url
         nvarchar role "user | admin"
         int isActive "1: active, 0: locked"
+        int is_premium "1: paid, 0: free"
+        datetime2 premium_expires_at "hạn dùng gói 30 ngày"
     }
 
     ARTISTS {
@@ -129,6 +132,18 @@ erDiagram
         int music_id FK
         nvarchar type "listen | search"
     }
+
+    ORDERS {
+        int order_id PK
+        bigint order_code UK
+        int user_id FK
+        int amount "19000"
+        nvarchar description
+        nvarchar status "PENDING | PAID | CANCELLED"
+        nvarchar payment_link_id
+        datetime2 created_at
+        datetime2 paid_at
+    }
 ```
 
 ---
@@ -137,16 +152,17 @@ erDiagram
 
 | Tên Bảng | Vai Trò & Mô Tả |
 |---|---|
-| **`users`** | Quản lý tài khoản, mật khẩu, email, avatar, trạng thái kích hoạt (`isActive`), và vai trò phân quyền (`role`: `user` hoặc `admin`). |
+| **`users`** | Quản lý tài khoản, mật khẩu, email, avatar, trạng thái kích hoạt (`isActive`), vai trò phân quyền (`role`: `user`/`admin`), gói `is_premium` và ngày hết hạn `premium_expires_at`. |
 | **`artists`** | Danh mục nghệ sĩ / ca sĩ thể hiện. |
 | **`albums`** | Danh mục album âm nhạc do nghệ sĩ phát hành. |
 | **`genres`** | Danh mục thể loại âm nhạc (Pop, Ballad, Rock, Rap, Jazz, ...). |
 | **`music`** | Kho bài hát chính: tên bài, thời lượng, file audio, ảnh bìa, lượt nghe (`listen_count`), thứ hạng. |
 | **`playlist`** | Danh sách playlist công cộng / hệ thống tạo sẵn do Admin tuyển chọn. |
 | **`playlist_music`** | Bảng trung gian liên kết bài hát vào playlist của hệ thống. |
-| **`user_playlist`** | Playlist do người dùng tự tạo, có cờ `is_shared` để bật/tắt chia sẻ cộng đồng (Public/Private). |
+| **`user_playlist`** | Playlist do người dùng tự tạo, có cờ `is_shared` để bật/tắt chia sẻ cộng đồng (Public/Private). Tài khoản Free tối đa 3 playlist, Premium không giới hạn. |
 | **`user_playlist_music`** | Bảng trung gian liên kết bài hát vào playlist của người dùng. |
 | **`user_liked_songs`** | Danh sách các bài hát mà người dùng bấm yêu thích (Liked Songs). |
 | **`user_liked_playlists`** | Danh sách playlist của người khác mà người dùng lưu về thư viện cá nhân. |
 | **`playlist_favourites`** | Bảng ghi nhận lượt yêu thích playlist phục vụ API backend. |
 | **`history`** | Ghi nhận nhật ký nghe nhạc và các từ khóa tìm kiếm gần đây của người dùng. |
+| **`orders`** | Quản lý giao dịch thanh toán PayOS VietQR gói Vinyl Premium (19.000đ/30 ngày): mã `order_code`, số tiền, trạng thái (`PENDING`/`PAID`). |
