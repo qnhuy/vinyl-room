@@ -7,6 +7,8 @@ class User {
   final String? avatarUrl;
   final String role;
   final int isActive;
+  final bool isPremium;
+  final DateTime? premiumExpiresAt;
 
   User({
     this.userId,
@@ -16,10 +18,27 @@ class User {
     this.avatarUrl,
     this.role = 'user',
     this.isActive = 1,
+    this.isPremium = false,
+    this.premiumExpiresAt,
   });
 
   /// Kiểm tra tài khoản có quyền Quản trị viên hay không
   bool get isAdmin => role.trim().toLowerCase() == 'admin';
+
+  /// Kiểm tra tài khoản có gói Vinyl Premium đang hoạt động hay không
+  bool get hasActivePremium {
+    if (!isPremium) return false;
+    if (premiumExpiresAt == null) return true;
+    return premiumExpiresAt!.isAfter(DateTime.now());
+  }
+
+  /// Số ngày sử dụng gói Premium còn lại
+  int get remainingPremiumDays {
+    if (!hasActivePremium) return 0;
+    if (premiumExpiresAt == null) return 999;
+    final diff = premiumExpiresAt!.difference(DateTime.now()).inDays;
+    return diff < 0 ? 0 : diff + 1;
+  }
 
   /// Tạo bản sao đối tượng với các thuộc tính thay đổi
   User copyWith({
@@ -30,6 +49,8 @@ class User {
     String? avatarUrl,
     String? role,
     int? isActive,
+    bool? isPremium,
+    DateTime? premiumExpiresAt,
   }) {
     return User(
       userId: userId ?? this.userId,
@@ -39,6 +60,8 @@ class User {
       avatarUrl: avatarUrl ?? this.avatarUrl,
       role: role ?? this.role,
       isActive: isActive ?? this.isActive,
+      isPremium: isPremium ?? this.isPremium,
+      premiumExpiresAt: premiumExpiresAt ?? this.premiumExpiresAt,
     );
   }
 
@@ -51,10 +74,21 @@ class User {
     'avatar_url': avatarUrl,
     'role': role,
     'isActive': isActive,
+    'is_premium': isPremium ? 1 : 0,
+    'premium_expires_at': premiumExpiresAt?.toIso8601String(),
   };
 
   /// Chuyển đổi Map (JSON) từ API thành đối tượng User.
   factory User.fromMap(Map<String, dynamic> map) {
+    DateTime? expiresAt;
+    final expRaw = map['premium_expires_at'];
+    if (expRaw != null && expRaw.toString().isNotEmpty) {
+      expiresAt = DateTime.tryParse(expRaw.toString());
+    }
+
+    final rawPremium = map['is_premium'];
+    final bool isPrem = rawPremium == 1 || rawPremium == true || rawPremium == '1';
+
     return User(
       userId: map['user_id'] is int
           ? map['user_id'] as int
@@ -67,6 +101,8 @@ class User {
       isActive: map['isActive'] is int
           ? map['isActive'] as int
           : int.tryParse('${map['isActive']}') ?? 1,
+      isPremium: isPrem,
+      premiumExpiresAt: expiresAt,
     );
   }
 }

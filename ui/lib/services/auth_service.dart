@@ -38,4 +38,14 @@ class AuthService {
     }
     return User.fromMap(Map<String, dynamic>.from(jsonDecode(res.body)));
   }
+
+  /// Lấy thông tin tài khoản mới nhất bao gồm trạng thái gói Premium
+  Future<User> getProfile() async {
+    final res = await Http.get('/auth/profile');
+    if (res.statusCode != 200) {
+      final data = jsonDecode(res.body);
+      throw Exception(data['error'] ?? 'Không thể tải thông tin tài khoản');
+    }
+    return User.fromMap(Map<String, dynamic>.from(jsonDecode(res.body)));
+  }
 }

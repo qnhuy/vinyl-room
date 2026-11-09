@@ -89,7 +89,15 @@ class MusicService {
       '/users/$_uid/playlists',
       body: {'playlist_name': name},
     );
-    if (res.statusCode >= 300) throw Exception('Lỗi tạo playlist!');
+    if (res.statusCode >= 300) {
+      try {
+        final err = jsonDecode(res.body);
+        throw Exception(err['error'] ?? 'Lỗi tạo playlist!');
+      } catch (e) {
+        if (e is Exception && !e.toString().contains('FormatException')) rethrow;
+        throw Exception('Lỗi tạo playlist!');
+      }
+    }
     notifyChange();
   }
 

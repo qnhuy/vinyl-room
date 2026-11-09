@@ -58,11 +58,37 @@ router.get("/:userId/playlists", async (req, res) => {
 
 router.post("/:userId/playlists", async (req, res) => {
   try {
+    const userId = Number(req.params.userId);
     const { playlist_name, description } = req.body || {};
     const pool = await getPool();
+
+    // Kiểm tra số lượng playlist hiện tại của user (Free tối đa 3 playlist)
+    const countRes = await pool
+      .request()
+      .input("userId", userId)
+      .query("SELECT COUNT(*) AS total FROM user_playlist WHERE user_id = @userId");
+    const currentCount = countRes.recordset[0]?.total || 0;
+
+    if (currentCount >= 3) {
+      const uRes = await pool
+        .request()
+        .input("uid", userId)
+        .query("SELECT is_premium, premium_expires_at FROM users WHERE user_id = @uid");
+      const user = uRes.recordset[0];
+      const isPremium = user && (user.is_premium === 1 && (!user.premium_expires_at || new Date(user.premium_expires_at) > new Date()));
+
+      if (!isPremium) {
+        return res.status(403).json({
+          error: "Tài khoản Miễn phí chỉ được tạo tối đa 3 Playlist. Nâng cấp Vinyl Premium (19.000đ/tháng) để tạo không giới hạn!",
+          code: "PLAYLIST_LIMIT_REACHED",
+          need_upgrade: true
+        });
+      }
+    }
+
     const result = await pool
       .request()
-      .input("userId", Number(req.params.userId))
+      .input("userId", userId)
       .input("name", playlist_name || "Playlist moi")
       .input("description", description || null)
       .query(`

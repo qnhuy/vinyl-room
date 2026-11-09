@@ -15,6 +15,8 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoggedIn => _user != null;
   int get userId => _user?.userId ?? 0;
   bool get isAdmin => _user?.isAdmin ?? false;
+  bool get isPremium => _user?.hasActivePremium ?? false;
+  int get remainingPremiumDays => _user?.remainingPremiumDays ?? 0;
   ThemeMode get themeMode => _themeMode;
 
   /// Khởi tạo và tải dữ liệu đã lưu từ SharedPreferences
@@ -47,6 +49,31 @@ class AuthProvider extends ChangeNotifier {
   Future<void> logout() async {
     await Session.setUser(null);
     _user = null;
+    notifyListeners();
+  }
+
+  /// Làm mới thông tin tài khoản và gói Premium từ máy chủ
+  Future<void> refreshProfile() async {
+    if (!isLoggedIn) return;
+    try {
+      final updated = await AuthService.instance.getProfile();
+      await Session.setUser(updated);
+      _user = updated;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error refreshing profile: $e');
+    }
+  }
+
+  /// Cập nhật trực tiếp trạng thái Premium của người dùng
+  Future<void> updatePremiumStatus(bool isPremium, DateTime? expiresAt) async {
+    if (_user == null) return;
+    final updated = _user!.copyWith(
+      isPremium: isPremium,
+      premiumExpiresAt: expiresAt,
+    );
+    await Session.setUser(updated);
+    _user = updated;
     notifyListeners();
   }
 
