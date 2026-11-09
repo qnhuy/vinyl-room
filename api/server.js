@@ -8,6 +8,7 @@ const musicRoutes = require("./routes/music");
 const userRoutes = require("./routes/users");
 const playlistRoutes = require("./routes/playlists");
 const adminRoutes = require("./routes/admin");
+const paymentRoutes = require("./routes/payment");
 
 const app = express();
 
@@ -25,6 +26,7 @@ app.use("/music", musicRoutes);
 app.use("/users", userRoutes);
 app.use("/playlists", playlistRoutes);
 app.use("/admin", adminRoutes);
+app.use("/payment", paymentRoutes);
 
 app.listen(apiPort, "0.0.0.0", () => {
   console.log("API: http://localhost:" + apiPort);
