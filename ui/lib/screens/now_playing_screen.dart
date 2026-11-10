@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import '../models/playlist.dart';
 import '../models/song.dart';
+import '../providers/auth_provider.dart';
 import '../providers/player_provider.dart';
 import '../services/music_service.dart';
 import '../services/session.dart';
@@ -191,6 +192,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         ),
                         IconButton(
                           onPressed: () {
+                            if (!AuthProvider.instance.isPremium) {
+                              Navigator.pushNamed(context, AppRoutes.premiumPayment);
+                              return;
+                            }
                             player.toggleSmartFlow();
                             setState(() {});
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -210,7 +215,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                                 ? const Color(0xFFE8A35A)
                                 : Colors.white38,
                           ),
-                          tooltip: 'AI Smart Flow (Nối mood thông minh)',
+                          tooltip: AuthProvider.instance.isPremium
+                              ? 'AI Smart Flow (Nối mood thông minh)'
+                              : 'AI Smart Flow (Yêu cầu Vinyl Premium 19k)',
                         ),
                         IconButton(
                           onPressed: _addToPlaylist,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/playlist.dart';
 import '../models/song.dart';
 import '../presenters/profile_presenter.dart';
@@ -81,6 +82,43 @@ class _ProfileScreenState extends State<ProfileScreen> implements ProfileView {
   }
 
   Future<void> _newPlaylist() async {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    if (!auth.isPremium && _playlists.length >= 3) {
+      final upgrade = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.workspace_premium, color: Color(0xFFD4AF37)),
+              SizedBox(width: 8),
+              Text('Đạt giới hạn Playlist'),
+            ],
+          ),
+          content: const Text(
+            'Tài khoản Miễn phí chỉ được tạo tối đa 3 Playlist.\n\nNâng cấp gói Vinyl Premium chỉ với 19.000đ/tháng để tạo không giới hạn và mở khóa AI Smart Flow!',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Để sau'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFD4AF37),
+                foregroundColor: Colors.black,
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Nâng cấp ngay (19k)'),
+            ),
+          ],
+        ),
+      );
+      if (upgrade == true && mounted) {
+        await Navigator.pushNamed(context, AppRoutes.premiumPayment);
+      }
+      return;
+    }
+
     final ctrl = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
@@ -213,6 +251,103 @@ class _ProfileScreenState extends State<ProfileScreen> implements ProfileView {
                         ],
                       ),
                     ),
+                  ),
+                  Consumer<AuthProvider>(
+                    builder: (context, auth, _) {
+                      if (auth.isPremium) {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Card(
+                            color: const Color(0xFFD4AF37).withValues(alpha: 0.12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+                            ),
+                            child: ListTile(
+                              leading: const CircleAvatar(
+                                backgroundColor: Color(0xFFD4AF37),
+                                child: Icon(Icons.workspace_premium, color: Colors.black),
+                              ),
+                              title: const Row(
+                                children: [
+                                  Text(
+                                    'VINYL PREMIUM',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 15,
+                                      color: Color(0xFFD4AF37),
+                                      letterSpacing: 1.1,
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Icon(Icons.verified, color: Color(0xFFD4AF37), size: 18),
+                                ],
+                              ),
+                              subtitle: Text(
+                                'Đang kích hoạt • Còn ${auth.remainingPremiumDays} ngày (AI Smart Flow & Không giới hạn Playlist)',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              trailing: TextButton(
+                                onPressed: () => Navigator.pushNamed(context, AppRoutes.premiumPayment),
+                                child: const Text('Chi tiết', style: TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                          ),
+                        );
+                      } else {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Card(
+                            elevation: 3,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              side: BorderSide(color: const Color(0xFFD4AF37).withValues(alpha: 0.6), width: 1),
+                            ),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: () => Navigator.pushNamed(context, AppRoutes.premiumPayment),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: const BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        gradient: LinearGradient(
+                                          colors: [Color(0xFFFFDF00), Color(0xFFD4AF37)],
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                        ),
+                                      ),
+                                      child: const Icon(Icons.workspace_premium, color: Colors.black, size: 24),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    const Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Nâng cấp Vinyl Premium (19k/tháng)',
+                                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFFD4AF37)),
+                                          ),
+                                          SizedBox(height: 2),
+                                          Text(
+                                            'Mở khóa AI Smart Flow & tạo Playlist không giới hạn',
+                                            style: TextStyle(fontSize: 12),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const Icon(Icons.arrow_forward_ios, size: 14, color: Color(0xFFD4AF37)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                    },
                   ),
                   if (Session.isAdmin) ...[
                     const SizedBox(height: 12),

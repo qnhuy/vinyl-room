@@ -10,6 +10,7 @@ import 'login_screen.dart';
 import 'main_shell_screen.dart';
 import 'now_playing_screen.dart';
 import 'playlist_detail_screen.dart';
+import 'premium_payment_screen.dart';
 import 'profile_screen.dart';
 import 'public_playlists_screen.dart';
 import 'ranking_screen.dart';
@@ -26,6 +27,7 @@ class AppRoutes {
   static const String nowPlaying = '/now-playing';
   static const String playlistDetail = '/playlist-detail';
   static const String publicPlaylists = '/public-playlists';
+  static const String premiumPayment = '/premium/payment';
   static const String login = '/login';
   static const String register = '/register';
 
@@ -83,6 +85,11 @@ class AppRoutes {
         return MaterialPageRoute(
           settings: settings,
           builder: (_) => const PublicPlaylistsScreen(),
+        );
+      case premiumPayment:
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => const PremiumPaymentScreen(),
         );
       case login:
         return MaterialPageRoute(

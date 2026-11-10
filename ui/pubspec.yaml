@@ -14,6 +14,8 @@ dependencies:
   just_audio: ^0.9.40
   provider: ^6.1.5+1
   flutter_dotenv: ^6.0.1
+  url_launcher: ^6.3.3
+  path_provider: ^2.1.6
 
 dev_dependencies:
   flutter_test:
