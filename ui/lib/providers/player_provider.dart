@@ -148,6 +148,9 @@ class PlayerProvider extends ChangeNotifier {
     } else if (url.contains('127.0.0.1:3000')) {
       url = url.replaceAll('http://127.0.0.1:3000', base);
       url = url.replaceAll('https://127.0.0.1:3000', base);
+    } else if (url.contains('10.0.2.2:3000')) {
+      url = url.replaceAll('http://10.0.2.2:3000', base);
+      url = url.replaceAll('https://10.0.2.2:3000', base);
     }
 
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
