@@ -8,6 +8,9 @@ class PaymentLinkResult {
   final String description;
   final String checkoutUrl;
   final String qrCode;
+  final String accountName;
+  final String accountNumber;
+  final String bin;
   final bool isPayOSConfigured;
 
   PaymentLinkResult({
@@ -16,6 +19,9 @@ class PaymentLinkResult {
     required this.description,
     required this.checkoutUrl,
     required this.qrCode,
+    required this.accountName,
+    required this.accountNumber,
+    required this.bin,
     required this.isPayOSConfigured,
   });
 
@@ -30,6 +36,9 @@ class PaymentLinkResult {
       description: map['description']?.toString() ?? '',
       checkoutUrl: map['checkoutUrl']?.toString() ?? '',
       qrCode: map['qrCode']?.toString() ?? '',
+      accountName: map['accountName']?.toString() ?? 'NGUYEN QUANG HUY',
+      accountNumber: map['accountNumber']?.toString() ?? '10142611112216716',
+      bin: map['bin']?.toString() ?? '970452',
       isPayOSConfigured: map['isPayOSConfigured'] == true,
     );
   }

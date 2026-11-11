@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const sql = require('mssql');
 const { getPool } = require('../configs/db');
-const PayOS = require('@payos/node');
+const { PayOS } = require('@payos/node');
 
 // Khởi tạo SDK PayOS nếu có cấu hình trong file .env
 let payos = null;
@@ -36,6 +36,7 @@ router.post('/create-payment-link', async (req, res) => {
     let checkoutUrl = '';
     let qrCode = '';
     let paymentLinkId = null;
+    let payosData = null;
 
     if (payos) {
       try {
@@ -48,19 +49,20 @@ router.post('/create-payment-link', async (req, res) => {
           cancelUrl: `${domain}/payment/cancel`
         };
 
-        const payosRes = await payos.createPaymentLink(paymentLinkData);
-        checkoutUrl = payosRes.checkoutUrl;
-        qrCode = payosRes.qrCode;
-        paymentLinkId = payosRes.paymentLinkId;
+        const payosRes = await payos.paymentRequests.create(paymentLinkData);
+        payosData = payosRes;
+        checkoutUrl = payosRes.checkoutUrl || '';
+        qrCode = payosRes.qrCode || '';
+        paymentLinkId = payosRes.paymentLinkId || payosRes.id || null;
       } catch (payosErr) {
         console.warn('PayOS API error, using VietQR fallback:', payosErr.message);
       }
     }
 
-    // Fallback QR chuẩn VietQR nếu chưa có PayOS API key thật hoặc đang test local
-    if (!checkoutUrl) {
-      qrCode = `https://img.vietqr.io/image/970422-0901234567-compact.png?amount=${amount}&addInfo=VR%20${orderCode}&accountName=VINYL%20ROOM%20PREMIUM`;
-      checkoutUrl = qrCode;
+    // Fallback nếu chưa kết nối được PayOS API
+    if (!qrCode) {
+      qrCode = `00020101021238610010A00000072701310006970422011709012345670208QRIBFTTA53037045405${amount}5802VN62${String(orderCode).length + 4}08${orderCode}6304`;
+      checkoutUrl = `https://pay.payos.vn`;
     }
 
     const pool = await getPool();
@@ -85,6 +87,9 @@ router.post('/create-payment-link', async (req, res) => {
         description,
         checkoutUrl,
         qrCode,
+        accountName: payosData?.accountName || 'NGUYEN QUANG HUY',
+        accountNumber: payosData?.accountNumber || '10142611119770087',
+        bin: payosData?.bin || '970452',
         isPayOSConfigured: !!payos
       }
     });
@@ -102,7 +107,7 @@ router.post('/webhook', async (req, res) => {
     // Xác thực chữ ký dữ liệu nếu PayOS được cấu hình
     if (payos && req.body.data) {
       try {
-        webhookData = payos.verifyPaymentWebhookData(req.body);
+        webhookData = await payos.webhooks.verify(req.body);
       } catch (verifyErr) {
         console.error('PayOS Webhook verification failed:', verifyErr.message);
         return res.status(400).json({ success: false, message: 'Chữ ký webhook không hợp lệ' });
@@ -185,8 +190,8 @@ router.get('/check-status/:orderCode', async (req, res) => {
     // Nếu đơn hàng đang PENDING và PayOS khả dụng, đồng bộ trực tiếp với PayOS
     if (order.status === 'PENDING' && payos) {
       try {
-        const paymentInfo = await payos.getPaymentLinkInformation(orderCode);
-        if (paymentInfo.status === 'PAID') {
+        const paymentInfo = await payos.paymentRequests.get(orderCode);
+        if (paymentInfo && paymentInfo.status === 'PAID') {
           await pool.request()
             .input('orderCode', sql.BigInt, orderCode)
             .query(`UPDATE orders SET status = 'PAID', paid_at = GETDATE() WHERE order_code = @orderCode`);

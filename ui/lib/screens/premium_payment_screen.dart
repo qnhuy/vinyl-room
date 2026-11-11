@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../providers/auth_provider.dart';
 import '../services/payment_service.dart';
 
@@ -17,6 +20,7 @@ class PremiumPaymentScreen extends StatefulWidget {
 }
 
 class _PremiumPaymentScreenState extends State<PremiumPaymentScreen> {
+  final GlobalKey _qrRepaintKey = GlobalKey();
   bool _isLoading = true;
   bool _isChecking = false;
   bool _isSavingImage = false;
@@ -87,13 +91,30 @@ class _PremiumPaymentScreenState extends State<PremiumPaymentScreen> {
 
     setState(() => _isSavingImage = true);
     try {
-      final qrUrl = _paymentLink!.qrCode;
-      final response = await http.get(Uri.parse(qrUrl));
-      if (response.statusCode != 200) {
-        throw Exception('Không thể tải dữ liệu ảnh mã QR');
+      Uint8List? bytes;
+
+      // 1. Chụp ảnh chất lượng cao trực tiếp từ widget QR (RepaintBoundary)
+      final boundary = _qrRepaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary != null) {
+        final image = await boundary.toImage(pixelRatio: 3.0);
+        final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+        if (byteData != null) {
+          bytes = byteData.buffer.asUint8List();
+        }
       }
 
-      final bytes = response.bodyBytes;
+      // 2. Fallback nếu qrCode là URL ảnh hợp lệ trên mạng
+      if (bytes == null && _paymentLink!.qrCode.startsWith('http')) {
+        final response = await http.get(Uri.parse(_paymentLink!.qrCode));
+        if (response.statusCode == 200) {
+          bytes = response.bodyBytes;
+        }
+      }
+
+      if (bytes == null) {
+        throw Exception('Không thể kết xuất dữ liệu ảnh mã QR');
+      }
+
       String? saveDirPath;
 
       if (Platform.isAndroid) {
@@ -501,41 +522,63 @@ class _PremiumPaymentScreenState extends State<PremiumPaymentScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Large QR Code Container
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFD4AF37), width: 2),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 10,
-                    spreadRadius: 2,
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.network(
-                  _paymentLink!.qrCode,
-                  height: 240,
-                  width: 240,
-                  fit: BoxFit.contain,
-                  loadingBuilder: (ctx, child, progress) {
-                    if (progress == null) return child;
-                    return const SizedBox(
-                      height: 240,
-                      width: 240,
-                      child: Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37))),
-                    );
-                  },
-                  errorBuilder: (_, __, ___) => Container(
-                    height: 200,
-                    alignment: Alignment.center,
-                    child: const Text('Không thể tải ảnh mã QR'),
-                  ),
+            // Large QR Code Container with RepaintBoundary for saving to device
+            RepaintBoundary(
+              key: _qrRepaintKey,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFD4AF37), width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 10,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: _paymentLink!.qrCode.startsWith('http')
+                      ? Image.network(
+                          _paymentLink!.qrCode,
+                          height: 240,
+                          width: 240,
+                          fit: BoxFit.contain,
+                          loadingBuilder: (ctx, child, progress) {
+                            if (progress == null) return child;
+                            return const SizedBox(
+                              height: 240,
+                              width: 240,
+                              child: Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37))),
+                            );
+                          },
+                          errorBuilder: (_, __, ___) => QrImageView(
+                            data: _paymentLink!.checkoutUrl.isNotEmpty
+                                ? _paymentLink!.checkoutUrl
+                                : 'VinylRoom ${_paymentLink!.orderCode}',
+                            version: QrVersions.auto,
+                            size: 240.0,
+                            backgroundColor: Colors.white,
+                          ),
+                        )
+                      : QrImageView(
+                          data: _paymentLink!.qrCode,
+                          version: QrVersions.auto,
+                          size: 240.0,
+                          backgroundColor: Colors.white,
+                          padding: const EdgeInsets.all(4),
+                          eyeStyle: const QrEyeStyle(
+                            eyeShape: QrEyeShape.square,
+                            color: Colors.black,
+                          ),
+                          dataModuleStyle: const QrDataModuleStyle(
+                            dataModuleShape: QrDataModuleShape.square,
+                            color: Colors.black,
+                          ),
+                        ),
                 ),
               ),
             ),
@@ -551,6 +594,10 @@ class _PremiumPaymentScreenState extends State<PremiumPaymentScreen> {
               child: Column(
                 children: [
                   _buildTransferRow('Số tiền:', '19.000 VNĐ', isHighlight: true),
+                  const Divider(height: 16),
+                  _buildTransferRow('Chủ tài khoản:', _paymentLink!.accountName, canCopy: true),
+                  const Divider(height: 16),
+                  _buildTransferRow('Số tài khoản:', _paymentLink!.accountNumber, canCopy: true),
                   const Divider(height: 16),
                   _buildTransferRow(
                     'Nội dung CK:',
