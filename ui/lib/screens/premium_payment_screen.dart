@@ -1,10 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../providers/auth_provider.dart';
 import '../services/payment_service.dart';
 
@@ -22,11 +22,18 @@ class _PremiumPaymentScreenState extends State<PremiumPaymentScreen> {
   bool _isSavingImage = false;
   PaymentLinkResult? _paymentLink;
   String? _errorMessage;
+  Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
     _initPaymentLink();
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
   }
 
   /// Khởi tạo và lấy link/mã QR thanh toán VietQR từ Backend PayOS
@@ -43,6 +50,7 @@ class _PremiumPaymentScreenState extends State<PremiumPaymentScreen> {
         _paymentLink = result;
         _isLoading = false;
       });
+      _startPolling();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -50,6 +58,27 @@ class _PremiumPaymentScreenState extends State<PremiumPaymentScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  /// Tự động kiểm tra trạng thái thanh toán định kỳ mỗi 2.5 giây (không cần bấm nút)
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 2500), (timer) async {
+      if (_paymentLink == null || !mounted || _isChecking) return;
+      try {
+        final status = await PaymentService.instance.checkStatus(_paymentLink!.orderCode);
+        if (!mounted) return;
+        if (status.isPaid) {
+          timer.cancel();
+          final auth = Provider.of<AuthProvider>(context, listen: false);
+          await auth.updatePremiumStatus(true, status.premiumExpiresAt);
+          if (!mounted) return;
+          _showSuccessDialog();
+        }
+      } catch (_) {
+        // Tự động bỏ qua lỗi kết nối tạm thời khi polling ngầm
+      }
+    });
   }
 
   /// Lưu ảnh mã QR về bộ nhớ máy (Download / Documents)
@@ -130,52 +159,6 @@ class _PremiumPaymentScreenState extends State<PremiumPaymentScreen> {
     }
   }
 
-  /// Mở liên kết thanh toán PayOS trên trình duyệt web
-  Future<void> _openCheckoutUrl() async {
-    if (_paymentLink == null || _paymentLink!.checkoutUrl.isEmpty) return;
-    try {
-      final uri = Uri.parse(_paymentLink!.checkoutUrl);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-    } catch (e) {
-      debugPrint('Error launching url: $e');
-    }
-  }
-
-  /// Kiểm tra trạng thái đơn hàng (xác nhận chuyển khoản thành công)
-  Future<void> _checkPaymentStatus() async {
-    if (_paymentLink == null) return;
-
-    setState(() => _isChecking = true);
-    try {
-      final status = await PaymentService.instance.checkStatus(_paymentLink!.orderCode);
-      if (!mounted) return;
-
-      if (status.isPaid) {
-        final auth = Provider.of<AuthProvider>(context, listen: false);
-        await auth.updatePremiumStatus(true, status.premiumExpiresAt);
-
-        if (!mounted) return;
-        _showSuccessDialog();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Chưa ghi nhận chuyển khoản. Vui lòng quét mã VietQR và kiểm tra lại sau giây lát!'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lỗi: ${e.toString().replaceAll('Exception: ', '')}')),
-      );
-    } finally {
-      if (mounted) setState(() => _isChecking = false);
-    }
-  }
-
   /// Kích hoạt thử nghiệm 30 ngày (Dành cho việc Demo / Chấm thi tức thì)
   Future<void> _handleTestActivate() async {
     setState(() => _isChecking = true);
@@ -230,6 +213,7 @@ class _PremiumPaymentScreenState extends State<PremiumPaymentScreen> {
   }
 
   void _showSuccessDialog() {
+    _pollTimer?.cancel();
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -331,60 +315,54 @@ class _PremiumPaymentScreenState extends State<PremiumPaymentScreen> {
                         _buildQrCodeCard(theme),
                         const SizedBox(height: 16),
 
-                        // Action Buttons: Lưu ảnh & Mở PayOS
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: _isSavingImage ? null : _saveQrImageToDevice,
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
-                                  side: const BorderSide(color: Color(0xFFD4AF37)),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                ),
-                                icon: _isSavingImage
-                                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                                    : const Icon(Icons.download, color: Color(0xFFD4AF37)),
-                                label: const Text(
-                                  'Lưu ảnh QR',
-                                  style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFD4AF37)),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: _openCheckoutUrl,
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                ),
-                                icon: const Icon(Icons.open_in_new),
-                                label: const Text('Mở PayOS', style: TextStyle(fontWeight: FontWeight.bold)),
-                              ),
-                            ),
-                          ],
+                        // Action: Lưu ảnh QR về máy
+                        OutlinedButton.icon(
+                          onPressed: _isSavingImage ? null : _saveQrImageToDevice,
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            side: const BorderSide(color: Color(0xFFD4AF37)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          icon: _isSavingImage
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.download, color: Color(0xFFD4AF37)),
+                          label: const Text(
+                            'Lưu ảnh mã QR về máy',
+                            style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFD4AF37)),
+                          ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 14),
 
-                        // Primary Action: Kiểm tra thanh toán
-                        SizedBox(
-                          height: 50,
-                          child: ElevatedButton.icon(
-                            onPressed: _isChecking ? null : _checkPaymentStatus,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFD4AF37),
-                              foregroundColor: Colors.black,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                              elevation: 2,
-                            ),
-                            icon: _isChecking
-                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                                : const Icon(Icons.check_circle_outline, size: 22),
-                            label: const Text(
-                              'Tôi đã chuyển khoản (Kiểm tra)',
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                            ),
+                        // Auto-detection Status Container with Spinner
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFD4AF37).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.3)),
+                          ),
+                          child: const Row(
+                            children: [
+                              SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: Color(0xFFD4AF37),
+                                ),
+                              ),
+                              SizedBox(width: 14),
+                              Expanded(
+                                child: Text(
+                                  'Đang chờ thanh toán...\nHệ thống sẽ tự động kích hoạt ngay khi nhận được tiền.',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    height: 1.35,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 12),

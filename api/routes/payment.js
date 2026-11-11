@@ -112,8 +112,9 @@ router.post('/webhook', async (req, res) => {
     const data = webhookData.data || webhookData;
     const orderCode = data.orderCode;
 
+    // Nếu không có orderCode (request ping kiểm tra webhook từ PayOS Dashboard)
     if (!orderCode) {
-      return res.status(400).json({ success: false, message: 'Thiếu orderCode' });
+      return res.status(200).json({ success: true, message: 'Webhook test ping nhận thành công' });
     }
 
     const pool = await getPool();
@@ -124,7 +125,9 @@ router.post('/webhook', async (req, res) => {
       .query('SELECT user_id, status FROM orders WHERE order_code = @orderCode');
 
     if (orderResult.recordset.length === 0) {
-      return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
+      // Trả về 200 để PayOS Dashboard xác nhận webhook thành công
+      console.log(`[PayOS Webhook] Nhận orderCode test ping hoặc chưa lưu trong DB: ${orderCode}`);
+      return res.status(200).json({ success: true, message: 'Đã nhận webhook' });
     }
 
     const order = orderResult.recordset[0];
